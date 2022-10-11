@@ -19,13 +19,52 @@ batch_size = 1
 num_frames = 64
 frame_stride = 0
 resolution = 224
+checkpoint_dir = "ckpt/rwf-2000_a0_stream"
+model_id='a0'
 
 # Model
-init_states, model = build_model_eval(checkpoint_dir="ckpt/rwf-2000_a0_stream",
-                                    model_id='a0', 
-                                    batch_size=batch_size, 
-                                    num_frames=num_frames, 
-                                    resolution=resolution)
+# init_states, model = build_model_eval(checkpoint_dir="ckpt/rwf-2000_a0_stream",
+#                                     model_id='a0', 
+#                                     batch_size=batch_size, 
+#                                     num_frames=num_frames, 
+#                                     resolution=resolution)
+
+
+
+use_positional_encoding = model_id in {'a3', 'a4', 'a5'}
+backbone = movinet.Movinet(
+    model_id=model_id,
+    causal=True,
+    conv_type='2plus1d',
+    se_type='2plus3d',
+    activation='hard_swish',
+    gating_activation='hard_sigmoid',
+    use_positional_encoding=use_positional_encoding,
+    use_external_states=True,
+)
+
+model = build_classifier(backbone, num_classes=2, batch_size=batch_size, num_frames=num_frames, resolution=resolution, freeze_backbone=False)
+init_states = model.init_states([batch_size, num_frames, resolution, resolution, 3])
+
+image_input = tf.keras.layers.Input(shape=[None, None, None, 3],
+                                        dtype=tf.float32,
+                                        name='image')
+
+state_shapes = {
+    name: ([s if s > 0 else None for s in state.shape], state.dtype)
+    for name, state in init_states.items()
+}
+
+states_input = {
+    name: tf.keras.Input(shape[1:], dtype=dtype, name=name)
+    for name, (shape, dtype) in state_shapes.items()
+}
+
+inputs = {**states_input, 'image': image_input}
+outputs = model(inputs)
+    
+model = CustomModel(inputs, outputs, name='movinet')
+model.load_weights(checkpoint_dir)
 
 
 
@@ -53,7 +92,6 @@ val_generator2 = DataGenerator_past(directory='/home/ahreumseo/research/violence
                              shuffle=False,
                              init_states = init_states)
 
-model.fit(val_generator, validation_data=val_generator, epochs=3)
 model.evaluate(val_generator)
 
 model.evaluate(val_generator2)
