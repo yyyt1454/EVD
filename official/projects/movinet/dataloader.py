@@ -204,7 +204,7 @@ class DataGenerator(Sequence):
         X_path = []
         Y_dict = {}
         # list all kinds of sub-folders
-        self.dirs = sorted(os.listdir(self.directory))
+        self.dirs = sorted(os.listbadir(self.directory))
         one_hots = np_utils.to_categorical(range(len(self.dirs)))
         for i,folder in enumerate(self.dirs):
             folder_path = os.path.join(self.directory,folder)
@@ -285,3 +285,6 @@ class DataGenerator(Sequence):
         # normalize
 #         data = self.normalize(data)
         return data
+
+
+
