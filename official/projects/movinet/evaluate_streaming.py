@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 
 from dataloader import *
-from models import *
+from model import *
 
 from official.vision.configs import video_classification
 from official.projects.movinet.configs import movinet as movinet_configs
@@ -21,7 +21,13 @@ frame_stride = 0
 resolution = 224
 
 # Model
-init_states, model = build_model("./ckpt/rwf-2000_a0_stream", batch_size, num_frames, resolution)
+
+
+init_states, model = build_model_eval(checkpoint_dir="ckpt/rwf-2000_a0_stream",
+                                    model_id='a0', 
+                                    batch_size=batch_size, 
+                                    num_frames=num_frames, 
+                                    resolution=resolution)
 
 # RWF-2000
 val_generator = DataGenerator_past(directory='/home/ahreumseo/research/violence/datasets/RWF2000-Video-Database-for-Violence-Detection/Dataset/dataset_npy_224/val',

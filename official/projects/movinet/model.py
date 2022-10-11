@@ -110,7 +110,19 @@ def build_model(checkpoint_dir='./movinet_a0_stream', model_id = 'a0', batch_siz
 
 
 
-def build_model_eval(checkpoint_dir='movinet_a0_stream', batch_size=1,num_frames=64, rewolution=224):
+def build_model_eval(checkpoint_dir="ckpt/rwf-2000_a0_stream", model_id = 'a0', batch_size=1, num_frames=64, resolution=224):
+
+    use_positional_encoding = model_id in {'a3', 'a4', 'a5'}
+    backbone = movinet.Movinet(
+        model_id=model_id,
+        causal=True,
+        conv_type='2plus1d',
+        se_type='2plus3d',
+        activation='hard_swish',
+        gating_activation='hard_sigmoid',
+        use_positional_encoding=use_positional_encoding,
+        use_external_states=True,
+    )
 
     model = build_classifier(backbone, num_classes=2, batch_size=batch_size, num_frames=num_frames, resolution=resolution, freeze_backbone=False)
     model.load_weights(checkpoint_dir)
@@ -135,4 +147,4 @@ def build_model_eval(checkpoint_dir='movinet_a0_stream', batch_size=1,num_frames
       
     model2 = CustomModel(inputs, outputs, name='movinet')
 
-    return ini_states, model2
+    return init_states, model2
