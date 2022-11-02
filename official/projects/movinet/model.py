@@ -9,6 +9,8 @@ from official.projects.movinet.modeling import movinet
 from official.projects.movinet.modeling import movinet_layers
 from official.projects.movinet.modeling import movinet_model
 
+from motion_detector import * 
+
 def build_classifier(backbone, num_classes, batch_size, num_frames, resolution, freeze_backbone=False):
     """Builds a classifier on top of a backbone model."""
     model = movinet_model.MovinetClassifier(
@@ -25,11 +27,89 @@ def build_classifier(backbone, num_classes, batch_size, num_frames, resolution, 
     return model
 
 
+T_CLIPS_TRAIN = 8
+T_CLIPS_TEST = 5
+N_FRAMES = 25
+
+class CustomModel_modified(tf.keras.Model):
+
+    def train_step(self, data):
+        x, y = data
+        init_states, image = x
+        frame_length = N_FRAMES
+
+        for j in range(int(frame_length/T_CLIPS_TRAIN)):
+            clip = image[:,T_CLIPS_TRAIN*j:T_CLIPS_TRAIN*(j+1),:,:,:]
+            
+            if j==0:
+                # Init states 
+                with tf.GradientTape() as tape:
+                    pred, states = self({**init_states, 'image': clip}, training=True)
+                    loss =  self.compiled_loss(y, pred)
+                # Compute gradients
+                trainable_vars = self.trainable_variables
+                gradients = tape.gradient(loss, trainable_vars)
+
+            else:
+                # Cumulative loss and gradient
+                with tf.GradientTape() as tape:
+                    pred, states = self({**states, 'image': clip}, training=True)
+                    loss += self.compiled_loss(y, pred)
+                gradients += tape.gradient(loss, trainable_vars)
+
+        # Update weights
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+
+
+        # Update metrics (includes the metric that tracks the loss)
+        self.compiled_metrics.update_state(y, pred)
+
+        # Return a dict mapping metric names to current value
+        return {m.name: m.result() for m in self.metrics}
+
+    def test_step(self, data):
+        
+        x, y = data
+        init_states, image = x[0], x[1]
+
+        for j in range(int(N_FRAMES/T_CLIPS_TEST)):
+            # clip = image[:,j:j+1,:,:,:]
+            clip = image[:,T_CLIPS_TRAIN*j:T_CLIPS_TRAIN*(j+1),:,:,:]
+
+            # IF motion is detected 
+            if motion_detector(clip):
+            
+                if j==0:
+                    # Init states 
+                    pred, states = self({**init_states, 'image': clip}, training=False)
+                    loss =  self.compiled_loss(y, pred)
+                else:
+                    # Cumulative loss and gradient
+                    try:
+                        pred, states = self({**states, 'image': clip}, training=False)
+                    except: 
+                        pred, states = self({**init_states, 'image': clip}, training=False)
+                    loss += self.compiled_loss(y, pred)
+
+            else: 
+                pred = np.array([[0.,1.]], dtype = np.float32)
+
+        # Update metrics (includes the metric that tracks the loss)
+        self.compiled_metrics.update_state(y, pred)
+
+        return {m.name: m.result() for m in self.metrics}
+
+
+
+
+
+
 class CustomModel(tf.keras.Model):
     def train_step(self, data):
         x, y = data
         with tf.GradientTape() as tape:
-            pred, states = self(x, training=True)  # Forward pass
+            # pred, states = self(x, training=True)  # Forward pass
+            pred, states = self({**x[0], 'image': x[1]}, training=True)
             loss = self.compiled_loss(y, pred)
 
         # Compute gradients
@@ -48,7 +128,7 @@ class CustomModel(tf.keras.Model):
     def test_step(self, data):
         
         x, y = data
-        y_pred, states = self(x, training=True)
+        y_pred, states = self({**x[0], 'image': x[1]}, training=True)
         self.compiled_loss(y, y_pred)
         self.compiled_metrics.update_state(y, y_pred)
         return {m.name: m.result() for m in self.metrics}
@@ -56,7 +136,7 @@ class CustomModel(tf.keras.Model):
 
 
 
-def build_model(checkpoint_dir='./movinet_a0_stream', model_id = 'a0', batch_size=1,num_frames=64, resolution=224):
+def build_model(checkpoint_dir='./movinet_a0_stream', model_id = 'a0', batch_size=1,num_frames=64, resolution=224, pretrain=True):
     
     # Create backbone and model.
     use_positional_encoding = model_id in {'a3', 'a4', 'a5'}
@@ -77,10 +157,11 @@ def build_model(checkpoint_dir='./movinet_a0_stream', model_id = 'a0', batch_siz
         output_states=True)
     model.build([1, 1, 1, 1, 3])
 
-    checkpoint_path = tf.train.latest_checkpoint(checkpoint_dir)
-    checkpoint = tf.train.Checkpoint(model=model)
-    status = checkpoint.restore(checkpoint_path)
-    status.assert_existing_objects_matched()
+    if pretrain:
+        checkpoint_path = tf.train.latest_checkpoint(checkpoint_dir)
+        checkpoint = tf.train.Checkpoint(model=model)
+        status = checkpoint.restore(checkpoint_path)
+        status.assert_existing_objects_matched()
 
     model2 = build_classifier(backbone, num_classes=2, batch_size=batch_size, num_frames=num_frames, resolution=resolution, freeze_backbone=False)
     init_states = model.init_states([batch_size, num_frames, resolution, resolution, 3])
@@ -104,7 +185,8 @@ def build_model(checkpoint_dir='./movinet_a0_stream', model_id = 'a0', batch_siz
     inputs = {**states_input, 'image': image_input}
     outputs = model2(inputs)
       
-    model3 = CustomModel(inputs, outputs, name='movinet')
+    # model3 = CustomModel(inputs, outputs, name='movinet')
+    model3 = CustomModel_modified(inputs, outputs)
 
     return init_states, model3
 
@@ -125,9 +207,8 @@ def build_model_eval(checkpoint_dir="ckpt/rwf-2000_a0_stream", model_id = 'a0', 
     )
 
     model = build_classifier(backbone, num_classes=2, batch_size=batch_size, num_frames=num_frames, resolution=resolution, freeze_backbone=False)
-    model.load_weights(checkpoint_dir)
-
     init_states = model.init_states([batch_size, num_frames, resolution, resolution, 3])
+    
     image_input = tf.keras.layers.Input(shape=[None, None, None, 3],
                                             dtype=tf.float32,
                                             name='image')
@@ -146,5 +227,6 @@ def build_model_eval(checkpoint_dir="ckpt/rwf-2000_a0_stream", model_id = 'a0', 
     outputs = model(inputs)
       
     model2 = CustomModel(inputs, outputs, name='movinet')
+    model2.load_weights(checkpoint_dir)
 
     return init_states, model2
