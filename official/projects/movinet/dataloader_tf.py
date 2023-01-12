@@ -1,8 +1,5 @@
 import os
-
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import mediapy as media
+#import mediapy as media
 import numpy as np
 # import PIL
 import pandas as pd
@@ -13,9 +10,8 @@ import cv2
 import tensorflow as tf
 # import tensorflow_datasets as tfds
 # import tensorflow_hub as hub
-from keras.utils import Sequence
-from keras.utils import np_utils
-
+from tensorflow.keras.utils import Sequence
+from tensorflow.python.keras.utils import np_utils
 
 class DataGenerator_past(Sequence):
     """Data Generator inherited from keras.utils.Sequence

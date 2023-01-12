@@ -2,15 +2,14 @@ import tensorflow as tf
 import numpy as np
 
 import sys
-sys.path.append("/home/ahreumseo/research/violence/datasets/MoViNet-TF/EVD")
-from official.vision.configs import video_classification
+sys.path.append("/EVD")
+#from official.vision.configs import video_classification
 # from official.projects.movinet.configs import video_classification
 from official.projects.movinet.configs import movinet as movinet_configs
 from official.projects.movinet.modeling import movinet
 from official.projects.movinet.modeling import movinet_layers
 from official.projects.movinet.modeling import movinet_model
 
-from motion_detector import * 
 from object_detector import * 
 
 def build_classifier(backbone, num_classes, batch_size, num_frames, resolution, freeze_backbone=False):
