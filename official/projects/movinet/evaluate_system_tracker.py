@@ -5,6 +5,7 @@ import cv2
 from dataloader_tf import * 
 from model import *
 import tensorflow as tf
+import tensorflow_hub as hub
 
 import sys 
 sys.path.append('/EVD/')
@@ -20,6 +21,15 @@ import time
 
 tf.config.list_physical_devices('GPU')
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+physical_devices = tf.config.list_physical_devices('GPU')
+#tf.config.experimental.set_memory_growth(physical_devices[0], True)
+tf.config.experimental.set_virtual_device_configuration(
+        physical_devices[0],
+        [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024)])
+
+
 
 ## CCTV busan
 #data_loader = Dataloader_CCTV(img_file_path = '/home/ahreumseo/research/violence/datasets/CCTV_busan/data_npy/512'       , label_file = '/home/ahreumseo/research/violence/datasets/CCTV_busan/label/label_motionobj.csv', target_module = 'object')
@@ -47,14 +57,19 @@ def motion_detector(curr_frame, prev_edge_intensity, threshold1, threshold2, rou
         
     return motion_status, curr_edge_intensity
 
-
+start = time.time()
 model_path = '/EVD/official/projects/movinet/models/efficientdet_d0_coco17_tpu-32/saved_model'
 od_model = tf.saved_model.load(model_path)
-print('od model loaded') 
+#od_model = hub.load("https://tfhub.dev/tensorflow/efficientdet/lite3/detection/1")
+end = time.time()
+print(f'od model loaded : {end-start}') 
 
-temp_image = tf.zeros([1,512,512,3],dtype=tf.uint8)
-od_model(temp_image)
-print('od model inferenced') 
+for i in range(10):
+    start = time.time()
+    temp_image = tf.zeros([1,512,512,3],dtype=tf.uint8)
+    od_model(temp_image)
+    end = time.time()
+    print(f'od model inferenced: {end-start}') 
 
 
 
